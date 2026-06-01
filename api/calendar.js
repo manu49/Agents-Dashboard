@@ -6,26 +6,17 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
-    const url = process.env.PIPEDREAM_CALENDAR_URL;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 25000);
-    const response = await fetch(url, { signal: controller.signal });
+    const response = await fetch(process.env.PIPEDREAM_CALENDAR_URL, { signal: controller.signal });
     clearTimeout(timeout);
+    const data = await response.json();
 
-    const raw = await response.text();
-    let data;
-    try { data = JSON.parse(raw); } catch(e) {
-      return res.status(200).json({ error: 'JSON parse failed', raw: raw.substring(0, 300) });
-    }
-
-    const items = data.items || [];
     const now = new Date();
     const todayET = new Date(now.getTime() - (4 * 60 * 60 * 1000));
     todayET.setHours(0, 0, 0, 0);
 
-    const allTitles = items.map(e => ({ summary: e.summary, type: e.eventType, hasDateTime: !!e.start?.dateTime, start: e.start?.dateTime || e.start?.date }));
-
-    const events = items
+    const events = (data.items || [])
       .filter(e => {
         if (e.eventType === 'workingLocation') return false;
         if (!e.start?.dateTime) return false;
@@ -52,8 +43,8 @@ export default async function handler(req, res) {
       })
       .slice(0, 8);
 
-    res.status(200).json({ events, count: events.length, debug: { total_items: items.length, today_et: todayET.toISOString(), all: allTitles } });
+    res.status(200).json({ events, count: events.length });
   } catch (err) {
-    res.status(200).json({ error: err.name === 'AbortError' ? 'timeout' : err.message });
+    res.status(err.name === 'AbortError' ? 504 : 500).json({ error: err.message });
   }
 }
