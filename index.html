@@ -263,20 +263,9 @@
     <div class="metric"><div class="metric-label">Unread mail</div><div class="metric-value" id="m-mail">—</div><div class="metric-sub">priority threads</div></div>
   </div>
 
-  <!-- Top row: Jobs + Gmail -->
+  <!-- Main grid -->
   <div class="main-grid">
-
-    <div class="card" id="jobs-card">
-      <div class="card-head">
-        <div class="card-title">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="5" width="12" height="9" rx="1.5"/><path d="M5.5 5V3.5A1.5 1.5 0 017 2h2a1.5 1.5 0 011.5 1.5V5"/></svg>
-          Job pipeline
-        </div>
-      </div>
-      <!-- static: rendered immediately -->
-    </div>
-
-    <div class="card" id="gmail-card">
+        <div class="card" id="gmail-card">
       <div class="card-head">
         <div class="card-title">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3.5" width="12" height="9" rx="1.5"/><path d="M2 5.5l6 4 6-4"/></svg>
@@ -342,7 +331,7 @@
       <div class="card-head">
         <div class="card-title">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v3M8 11v3M2 8h3M11 8h3M4.2 4.2l2.1 2.1M9.7 9.7l2.1 2.1M4.2 11.8l2.1-2.1M9.7 6.3l2.1-2.1"/></svg>
-          Today's action items
+          Pending actions from email
         </div>
       </div>
       <div class="skel-wrap">
@@ -382,31 +371,6 @@ function parseJSON(raw) {
 // ── Date ─────────────────────────────────────────────────────────────────────
 $('dateline').textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
-// ── Static: Jobs ─────────────────────────────────────────────────────────────
-const JOBS = [
-  { co: 'Deutsche Bank', role: 'Capital Quant Strategist', note: '1st round · Jun 1, 12pm UK', status: 'interview', dot: 'd-amber', badge: 'b-amber', urgent: true },
-  { co: 'Deutsche Bank', role: 'Workday portal', note: 'Action required: complete profile', status: 'action req.', dot: 'd-red', badge: 'b-red', urgent: true },
-  { co: 'XTX Markets', role: 'Quant Researcher', note: '$250B/day · Alex Gerko', status: 'on radar', dot: 'd-blue', badge: 'b-blue', urgent: false },
-  { co: 'Gogi AI', role: 'Role TBD', note: 'Met Clarice Bonaccorsi', status: 'contact', dot: 'd-gray', badge: 'b-gray', urgent: false },
-];
-
-function renderJobs() {
-  const html = JOBS.map(j => `
-    <div class="row">
-      <div class="row-dot ${j.dot}"></div>
-      <div class="row-body">
-        <div class="row-title" style="${j.urgent ? 'font-weight:500' : ''}">${j.co} — ${j.role}</div>
-        <div class="row-sub">${j.note}</div>
-      </div>
-      <div class="row-end"><span class="badge ${j.badge}">${j.status}</span></div>
-    </div>`).join('');
-  $('jobs-card').innerHTML = `
-    <div class="card-head"><div class="card-title">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="5" width="12" height="9" rx="1.5"/><path d="M5.5 5V3.5A1.5 1.5 0 017 2h2a1.5 1.5 0 011.5 1.5V5"/></svg>
-      Job pipeline
-    </div></div>${html}`;
-}
-
 // ── Live: Google Calendar ─────────────────────────────────────────────────────
 async function loadMeetings() {
   const head = `<div class="card-head"><div class="card-title">
@@ -435,6 +399,7 @@ Format date as "Mon Jun 2", time as "5:30pm EDT". Platform = Zoom/Meet/Teams/pho
           <div class="row-sub">${e.date}${e.time ? ' · ' + e.time : ''}${e.duration ? ' · ' + e.duration : ''}${e.platform ? ' · ' + e.platform : ''}</div>
         </div>
       </div>`).join('');
+    $('m-meetings').textContent = d.events.length;
     $('meetings-card').innerHTML = head + html;
     updateBadge('Calendar', 'on');
   } catch {
@@ -587,14 +552,13 @@ async function askWindsor() {
 
 $('windsor-q').addEventListener('keydown', e => { if (e.key === 'Enter') askWindsor(); });
 
-// ── Live: Action items ────────────────────────────────────────────────────────
+// ── Live: Action items (from Gmail) ─────────────────────────────────────────
 async function loadActions() {
   try {
     const raw = await callClaude({
-      system: `You are a career assistant. Return ONLY valid JSON with today's top action items for Manupriya, a quant finance job seeker at CMU:
-{"items":[{"text":"...","type":"urgent|important|soon","source":"..."}]}
-Max 5 items. Known context: Deutsche Bank 1st round interview Jun 1 12pm UK (TODAY), Workday portal needs completing, XTX Markets on radar, meeting Raghav Bansal May 31 5pm EDT, Ameya Kanitkar Jun 10. Prioritize the interview and pending tasks. No markdown.`,
-      user: "What should Manupriya focus on today?"
+      system: `You are a productivity assistant. Search the user's recent Gmail (last 14 days) and extract concrete pending action items — emails needing a reply, forms to complete, deadlines, or follow-ups. Return ONLY valid JSON, no markdown: {"items":[{"text":"...","type":"urgent|important|soon","source":"..."}]} Max 6 items. Be specific — name the sender or subject line. Prioritize unanswered emails requiring a response and job-related follow-ups.`,
+      user: "Search my Gmail last 14 days and find emails needing action or a reply",
+      mcp_servers: [{ type: 'url', url: 'https://gmailmcp.googleapis.com/mcp/v1', name: 'gmail' }]
     });
     const d = parseJSON(raw);
     if (!d || !d.items.length) {
@@ -621,7 +585,7 @@ Max 5 items. Known context: Deutsche Bank 1st round interview Jun 1 12pm UK (TOD
 function actionsHead() {
   return `<div class="card-head"><div class="card-title">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v3M8 11v3M2 8h3M11 8h3M4.2 4.2l2.1 2.1M9.7 9.7l2.1 2.1M4.2 11.8l2.1-2.1M9.7 6.3l2.1-2.1"/></svg>
-    Today's action items
+    Pending actions from email
   </div></div>`;
 }
 
@@ -638,7 +602,6 @@ function updateBadge(name, state) {
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 function loadAll() {
-  renderJobs();
   ['Notion','Gmail','Calendar','Windsor.ai'].forEach(n => updateBadge(n, 'loading'));
   loadNotion();
   loadGmail();
