@@ -351,7 +351,7 @@
 <script>
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
-const CLAUDE_API = 'https://api.anthropic.com/v1/messages';
+const CLAUDE_API = '/api/proxy';
 const MODEL = 'claude-sonnet-4-20250514';
 
 async function callClaude({ system, user, mcp_servers = [], tools = [] }) {
