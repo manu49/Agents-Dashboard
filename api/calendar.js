@@ -1,17 +1,24 @@
+export const config = { maxDuration: 30 };
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
-    const response = await fetch(process.env.PIPEDREAM_CALENDAR_URL);
-    const data = await response.json();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25000);
 
+    const response = await fetch(process.env.PIPEDREAM_CALENDAR_URL, {
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+
+    const data = await response.json();
     const now = new Date();
 
     const events = (data.items || [])
       .filter(e => {
-        // skip all-day working location / office events
         if (e.eventType === 'workingLocation') return false;
         if (e.start?.date && !e.start?.dateTime) return false;
         const start = new Date(e.start?.dateTime || e.start?.date);
@@ -21,11 +28,9 @@ export default async function handler(req, res) {
         const start = new Date(e.start.dateTime);
         const end = new Date(e.end.dateTime);
         const duration = Math.round((end - start) / 60000);
-
-        // detect platform from description/location
         const text = ((e.description || '') + (e.location || '')).toLowerCase();
         let platform = '';
-        if (e.conferenceData || text.includes('meet.google') || (e.description || '').includes('meet.google')) platform = 'Google Meet';
+        if (e.conferenceData || text.includes('meet.google')) platform = 'Google Meet';
         else if (text.includes('zoom')) platform = 'Zoom';
         else if (text.includes('webex')) platform = 'Webex';
         else if (text.includes('teams')) platform = 'Teams';
@@ -43,6 +48,7 @@ export default async function handler(req, res) {
 
     res.status(200).json({ events, count: events.length });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    const isTimeout = err.name === 'AbortError';
+    res.status(isTimeout ? 504 : 500).json({ error: isTimeout ? 'Calendar request timed out' : err.message });
   }
 }
