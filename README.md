@@ -32,3 +32,4 @@ Repo → Settings → Pages → Source: Deploy from branch `main` → `/ (root)`
 - Anthropic Claude API with MCP server integration
 - DM Sans + DM Mono (Google Fonts)
 - Dark mode via `prefers-color-scheme`
+
