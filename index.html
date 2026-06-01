@@ -249,6 +249,7 @@
     <div class="header-right" id="int-badges">
       <div class="int-badge"><span class="int-dot dot-loading"></span>Notion</div>
       <div class="int-badge"><span class="int-dot dot-loading"></span>Gmail</div>
+      <div class="int-badge"><span class="int-dot dot-loading"></span>Calendar</div>
       <div class="int-badge"><span class="int-dot dot-loading"></span>Windsor.ai</div>
       <button class="btn-refresh" onclick="loadAll()">↻ Refresh</button>
     </div>
@@ -295,6 +296,10 @@
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M5 2v2M11 2v2M2 6.5h12"/></svg>
           Upcoming meetings
         </div>
+      </div>
+      <div class="skel-wrap">
+        <div class="skel" style="height:14px;width:60%"></div>
+        <div class="skel" style="height:14px;width:75%"></div>
       </div>
     </div>
 
@@ -402,26 +407,40 @@ function renderJobs() {
     </div></div>${html}`;
 }
 
-// ── Static: Meetings ─────────────────────────────────────────────────────────
-const MEETINGS = [
-  { name: 'Raghav Bansal', when: 'May 31 · 5:00pm EDT', meta: '30 min · cal.com', dot: 'd-blue' },
-  { name: 'Ameya Kanitkar', when: 'Jun 10 · 5:30pm EDT', meta: 'Larridin · 30 min · Google Meet', dot: 'd-blue' },
-];
-
-function renderMeetings() {
-  const html = MEETINGS.map(m => `
-    <div class="row">
-      <div class="row-dot ${m.dot}"></div>
-      <div class="row-body">
-        <div class="row-title">${m.name}</div>
-        <div class="row-sub">${m.when} · ${m.meta}</div>
-      </div>
-    </div>`).join('');
-  $('meetings-card').innerHTML = `
-    <div class="card-head"><div class="card-title">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M5 2v2M11 2v2M2 6.5h12"/></svg>
-      Upcoming meetings
-    </div></div>${html}`;
+// ── Live: Google Calendar ─────────────────────────────────────────────────────
+async function loadMeetings() {
+  const head = `<div class="card-head"><div class="card-title">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M5 2v2M11 2v2M2 6.5h12"/></svg>
+    Upcoming meetings
+  </div></div>`;
+  try {
+    const raw = await callClaude({
+      system: `Fetch the user's upcoming Google Calendar events for the next 14 days. Return ONLY valid JSON, no markdown:
+{"events":[{"title":"...","date":"...","time":"...","platform":"...","duration":"..."}],"count":N}
+Format date as "Mon Jun 2", time as "5:30pm EDT". Platform = Zoom/Meet/Teams/phone/in-person if detectable. Max 6 events. Skip all-day/blocking events. If none return {"events":[],"count":0}.`,
+      user: 'List my upcoming calendar events for the next 14 days',
+      mcp_servers: [{ type: 'url', url: 'https://calendarmcp.googleapis.com/mcp/v1', name: 'gcal' }]
+    });
+    const d = parseJSON(raw);
+    if (!d || !d.events.length) {
+      $('meetings-card').innerHTML = head + '<div class="empty">No upcoming meetings in the next 14 days.</div>';
+      updateBadge('Calendar', 'on');
+      return;
+    }
+    const html = d.events.map(e => `
+      <div class="row">
+        <div class="row-dot d-blue"></div>
+        <div class="row-body">
+          <div class="row-title">${e.title}</div>
+          <div class="row-sub">${e.date}${e.time ? ' · ' + e.time : ''}${e.duration ? ' · ' + e.duration : ''}${e.platform ? ' · ' + e.platform : ''}</div>
+        </div>
+      </div>`).join('');
+    $('meetings-card').innerHTML = head + html;
+    updateBadge('Calendar', 'on');
+  } catch {
+    $('meetings-card').innerHTML = head + '<div class="empty">Google Calendar unavailable.</div>';
+    updateBadge('Calendar', 'off');
+  }
 }
 
 // ── Live: Notion ──────────────────────────────────────────────────────────────
@@ -620,10 +639,10 @@ function updateBadge(name, state) {
 // ── Boot ──────────────────────────────────────────────────────────────────────
 function loadAll() {
   renderJobs();
-  renderMeetings();
-  ['Notion','Gmail','Windsor.ai'].forEach(n => updateBadge(n, 'loading'));
+  ['Notion','Gmail','Calendar','Windsor.ai'].forEach(n => updateBadge(n, 'loading'));
   loadNotion();
   loadGmail();
+  loadMeetings();
   loadWindsor();
   loadActions();
 }
