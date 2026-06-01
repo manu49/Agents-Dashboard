@@ -6,24 +6,30 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
+    const url = process.env.PIPEDREAM_CALENDAR_URL;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 25000);
-    const response = await fetch(process.env.PIPEDREAM_CALENDAR_URL, { signal: controller.signal });
+    const response = await fetch(url, { signal: controller.signal });
     clearTimeout(timeout);
-    const data = await response.json();
 
-    // Use start of today in ET (UTC-4) to avoid timezone filtering issues
+    const raw = await response.text();
+    let data;
+    try { data = JSON.parse(raw); } catch(e) {
+      return res.status(200).json({ error: 'JSON parse failed', raw: raw.substring(0, 300) });
+    }
+
+    const items = data.items || [];
     const now = new Date();
     const todayET = new Date(now.getTime() - (4 * 60 * 60 * 1000));
     todayET.setHours(0, 0, 0, 0);
 
-    const events = (data.items || [])
+    const allTitles = items.map(e => ({ summary: e.summary, type: e.eventType, hasDateTime: !!e.start?.dateTime, start: e.start?.dateTime || e.start?.date }));
+
+    const events = items
       .filter(e => {
         if (e.eventType === 'workingLocation') return false;
-        // Skip all-day events with no time component
         if (!e.start?.dateTime) return false;
-        const start = new Date(e.start.dateTime);
-        return start >= todayET;
+        return new Date(e.start.dateTime) >= todayET;
       })
       .map(e => {
         const start = new Date(e.start.dateTime);
@@ -36,7 +42,6 @@ export default async function handler(req, res) {
         else if (text.includes('webex')) platform = 'Webex';
         else if (text.includes('teams')) platform = 'Teams';
         else if (e.location) platform = e.location.split(',')[0].trim();
-
         return {
           title: e.summary,
           date: start.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'America/New_York' }),
@@ -47,9 +52,8 @@ export default async function handler(req, res) {
       })
       .slice(0, 8);
 
-    res.status(200).json({ events, count: events.length, debug_total: (data.items || []).length });
+    res.status(200).json({ events, count: events.length, debug: { total_items: items.length, today_et: todayET.toISOString(), all: allTitles } });
   } catch (err) {
-    const isTimeout = err.name === 'AbortError';
-    res.status(isTimeout ? 504 : 500).json({ error: isTimeout ? 'Calendar timed out' : err.message });
+    res.status(200).json({ error: err.name === 'AbortError' ? 'timeout' : err.message });
   }
 }
