@@ -370,42 +370,35 @@ function parseJSON(raw) {
 // ── Date ─────────────────────────────────────────────────────────────────────
 $('dateline').textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
-// ── Meetings: fetched from Google Calendar via Claude chat ──────────────────
-function loadMeetings() {
-  const MEETINGS = [
-    { title: 'Intro: Manupriya & Vasily Strela (RBC)', date: 'Thu Jun 4', time: '1:00pm EDT', meta: '30 min · 200 Vesey St, Canal Room 9F' },
-    { title: 'Intro: Manupriya & Amogh Bansal (RBC)', date: 'Thu Jun 4', time: '1:30pm EDT', meta: '30 min · Webex' },
-    { title: 'Intro: Manupriya & Hari Manappattil (RBC)', date: 'Thu Jun 4', time: '2:15pm EDT', meta: '30 min · 200 Vesey St, Canal Room 9F' },
-    { title: 'Intro: Manupriya & Justin Snyder (RBC)', date: 'Thu Jun 4', time: '2:45pm EDT', meta: '30 min · 200 Vesey St, Canal Room 9F' },
-    { title: 'Intro: Manupriya & Sam Pfeiffer (RBC)', date: 'Thu Jun 4', time: '3:15pm EDT', meta: '30 min · 200 Vesey St, Canal Room 9F' },
-    { title: 'Angela & Deepak (Worktrace.ai)', date: 'Fri Jun 5', time: '12:00pm EDT', meta: '30 min · Google Meet' },
-    { title: 'Manupriya & Ameya Kanitkar (Larridin)', date: 'Wed Jun 10', time: '5:30pm EDT', meta: '30 min · Google Meet' },
-  ];
+// ── Live: Google Calendar (via Pipedream → Vercel) ───────────────────────────
+async function loadMeetings() {
   const head = `<div class="card-head"><div class="card-title">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M5 2v2M11 2v2M2 6.5h12"/></svg>
     Upcoming meetings
   </div></div>`;
-  const today = new Date();
-  const upcoming = MEETINGS.filter(m => {
-    const d = new Date(m.date + ' 2026');
-    return d >= new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  });
-  $('m-meetings').textContent = upcoming.length;
-  if (!upcoming.length) {
-    $('meetings-card').innerHTML = head + '<div class="empty">No upcoming meetings.</div>';
+  try {
+    const res = await fetch('/api/calendar');
+    const d = await res.json();
+    $('m-meetings').textContent = d.count || 0;
+    if (!d.events || !d.events.length) {
+      $('meetings-card').innerHTML = head + '<div class="empty">No upcoming meetings.</div>';
+      updateBadge('Calendar', 'on');
+      return;
+    }
+    const html = d.events.map(e => `
+      <div class="row">
+        <div class="row-dot d-blue"></div>
+        <div class="row-body">
+          <div class="row-title">${e.title}</div>
+          <div class="row-sub">${e.date} · ${e.time} · ${e.duration}${e.platform ? ' · ' + e.platform : ''}</div>
+        </div>
+      </div>`).join('');
+    $('meetings-card').innerHTML = head + html;
     updateBadge('Calendar', 'on');
-    return;
+  } catch {
+    $('meetings-card').innerHTML = head + '<div class="empty">Calendar unavailable.</div>';
+    updateBadge('Calendar', 'off');
   }
-  const html = upcoming.map(m => `
-    <div class="row">
-      <div class="row-dot d-blue"></div>
-      <div class="row-body">
-        <div class="row-title">${m.title}</div>
-        <div class="row-sub">${m.date} · ${m.time} · ${m.meta}</div>
-      </div>
-    </div>`).join('');
-  $('meetings-card').innerHTML = head + html;
-  updateBadge('Calendar', 'on');
 }
 
 // ── Live: Notion ──────────────────────────────────────────────────────────────
