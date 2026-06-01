@@ -444,20 +444,14 @@ function notionHead() {
   </div></div>`;
 }
 
-// ── Live: Gmail ───────────────────────────────────────────────────────────────
+// ── Live: Gmail (via Pipedream → Vercel) ─────────────────────────────────────
 async function loadGmail() {
   try {
-    const raw = await callClaude({
-      system: `Search Gmail for recent priority emails related to Manupriya's quant finance job search. Return ONLY valid JSON:
-{"threads":[{"from":"...","subject":"...","date":"...","unread":true/false}],"unreadCount":N}
-Max 5 threads. Prioritize Deutsche Bank, XTX Markets, recruiters, finance roles. No markdown.`,
-      user: 'Search Gmail: is:important newer_than:7d job search quant finance',
-      mcp_servers: [{ type: 'url', url: 'https://gmailmcp.googleapis.com/mcp/v1', name: 'gmail' }]
-    });
-    const d = parseJSON(raw);
-    $('m-mail').textContent = d ? d.unreadCount : '?';
-    if (!d || !d.threads.length) {
-      $('gmail-card').innerHTML = gmailHead() + '<div class="empty">No priority emails in the last 7 days.</div>';
+    const res = await fetch('/api/gmail');
+    const d = await res.json();
+    $('m-mail').textContent = d.unreadCount || 0;
+    if (!d.threads || !d.threads.length) {
+      $('gmail-card').innerHTML = gmailHead() + '<div class="empty">No priority emails in the last 14 days.</div>';
       updateBadge('Gmail', 'on');
       return;
     }
@@ -466,7 +460,7 @@ Max 5 threads. Prioritize Deutsche Bank, XTX Markets, recruiters, finance roles.
         <div class="row-dot ${t.unread ? 'd-blue' : 'd-gray'}"></div>
         <div class="row-body">
           <div class="row-title" style="${t.unread ? 'font-weight:500' : ''}">${t.subject || '(no subject)'}</div>
-          <div class="row-sub">${t.from || ''}${t.date ? ' · ' + t.date : ''}</div>
+          <div class="row-sub">${t.from || ''}</div>
         </div>
         ${t.unread ? '<div class="row-end"><span class="badge b-blue">Unread</span></div>' : ''}
       </div>`).join('');
